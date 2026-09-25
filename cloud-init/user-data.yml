@@ -1,0 +1,15 @@
+#cloud-config
+hostname: customer-database
+
+users:
+  - name: ubuntu
+    groups: [adm, sudo]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    lock_passwd: true
+
+ssh_pwauth: false
+
+runcmd:
+  - ['sh', '-c', 'curl -fsSL https://tailscale.com/install.sh | sh']
+  - ['tailscale', 'up', '--auth-key=AUTH_KEY_HERE', '--advertise-tags=tag:database', '--ssh', '--operator=ubuntu']

@@ -1,5 +1,5 @@
 {
-  description = "Tailscale PAM Demo";
+  description = "Infrastructure";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -24,7 +24,7 @@
             terraform
             openssh
             git
-          ]
+          ];
         };
       });
 }

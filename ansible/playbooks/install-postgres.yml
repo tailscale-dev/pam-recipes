@@ -1,36 +1,17 @@
 ---
-- name: Install PostgreSQL listening on the Tailscale interface
+- name: Install PostgreSQL listening on all interfaces
   hosts: customer-database
   remote_user: ubuntu
   become: true
 
   vars:
+    ansible_pipelining: true   # avoids temp-file permission issues when becoming postgres
     pg_port: 5432
-    # Tailscale's CGNAT (IPv4) and ULA (IPv6) ranges
-    pg_allowed_cidrs:
-      - 100.64.0.0/10
-      - fd7a:115c:a1e0::/48
+    pg_admin_user: pgadmin
+    # This is just a demo, don't commit your password to git. Use a secret manager!
+    pg_admin_password: pgadmin
 
   tasks:
-    - name: Wait for Tailscale to have an IPv4 address
-      ansible.builtin.command: tailscale ip -4
-      register: ts_ip4
-      retries: 30
-      delay: 5
-      until: ts_ip4.rc == 0 and ts_ip4.stdout | trim | length > 0
-      changed_when: false
-
-    - name: Get Tailscale IPv6 address
-      ansible.builtin.command: tailscale ip -6
-      register: ts_ip6
-      changed_when: false
-      failed_when: false
-
-    - name: Set Tailscale address facts
-      ansible.builtin.set_fact:
-        tailscale_ipv4: "{{ ts_ip4.stdout | trim }}"
-        tailscale_ipv6: "{{ ts_ip6.stdout | trim if ts_ip6.rc == 0 else '' }}"
-
     - name: Install PostgreSQL
       ansible.builtin.apt:
         name:
@@ -47,80 +28,53 @@
         recurse: false
       register: pg_version_dirs
 
-    - name: Set PostgreSQL version facts
-      ansible.builtin.set_fact:
-        pg_version: "{{ pg_version_dirs.files | map(attribute='path') | map('basename') | map('int') | max }}"
-
     - name: Set PostgreSQL config path
       ansible.builtin.set_fact:
-        pg_conf_dir: "/etc/postgresql/{{ pg_version }}/main"
+        pg_conf_dir: "/etc/postgresql/{{ pg_version_dirs.files | map(attribute='path') | map('basename') | map('int') | max }}/main"
 
-    - name: Configure listen_addresses (Tailscale + localhost)
+    - name: Listen on all interfaces
       ansible.builtin.copy:
-        dest: "{{ pg_conf_dir }}/conf.d/10-tailscale.conf"
+        dest: "{{ pg_conf_dir }}/conf.d/10-listen.conf"
         owner: postgres
         group: postgres
         mode: "0644"
+        # Wouldn't usually listen on all interfaces, but for this demo
+        # it makes life easier.
         content: |
           # Managed by Ansible
-          listen_addresses = '{{ (['localhost', tailscale_ipv4] + ([tailscale_ipv6] if tailscale_ipv6 else [])) | join(',') }}'
+          listen_addresses = '*'
           port = {{ pg_port }}
       notify: Restart PostgreSQL
 
-    - name: Allow Tailscale ranges in pg_hba.conf
+    - name: Allow password auth from any address
       ansible.builtin.blockinfile:
         path: "{{ pg_conf_dir }}/pg_hba.conf"
-        marker: "# {mark} ANSIBLE MANAGED - tailscale"
+        marker: "# {mark} ANSIBLE MANAGED - remote access"
         block: |
-          {% for cidr in pg_allowed_cidrs %}
-          host    all    all    {{ cidr }}    scram-sha-256
-          {% endfor %}
+          host    all    all    0.0.0.0/0    scram-sha-256
+          host    all    all    ::/0         scram-sha-256
       notify: Restart PostgreSQL
-
-    - name: Make PostgreSQL wait for the Tailscale interface at boot
-      ansible.builtin.copy:
-        dest: /etc/systemd/system/postgresql@.service.d/tailscale.conf
-        mode: "0644"
-        content: |
-          # Managed by Ansible
-          [Unit]
-          After=tailscaled.service network-online.target
-          Wants=tailscaled.service network-online.target
-
-          [Service]
-          ExecStartPre=/usr/bin/timeout 60 /bin/sh -c 'until ip -4 addr show dev tailscale0 | grep -qF "inet {{ tailscale_ipv4 }}/"; do sleep 1; done'
-      notify:
-        - Reload systemd
-        - Restart PostgreSQL
-
-    - name: Ensure drop-in directory exists
-      ansible.builtin.file:
-        path: /etc/systemd/system/postgresql@.service.d
-        state: directory
-        mode: "0755"
-      # listed after for readability; see note below
 
     - name: Enable and start PostgreSQL
       ansible.builtin.systemd:
-        name: "postgresql@{{ pg_version }}-main"
+        name: postgresql
         enabled: true
         state: started
 
-    - name: Flush handlers so config is applied before verification
+    - name: Apply config changes before creating roles
       ansible.builtin.meta: flush_handlers
 
-    - name: Verify PostgreSQL is listening on the Tailscale IP
-      ansible.builtin.wait_for:
-        host: "{{ tailscale_ipv4 }}"
-        port: "{{ pg_port }}"
-        timeout: 30
+    - name: Create administrator role
+      become_user: postgres
+      community.postgresql.postgresql_user:
+        name: "{{ pg_admin_user }}"
+        password: "{{ pg_admin_password }}"
+        role_attr_flags: LOGIN,SUPERUSER
+        state: present
+      #no_log: true
 
   handlers:
-    - name: Reload systemd
-      ansible.builtin.systemd:
-        daemon_reload: true
-
     - name: Restart PostgreSQL
       ansible.builtin.systemd:
-        name: "postgresql@{{ pg_version }}-main"
+        name: postgresql
         state: restarted

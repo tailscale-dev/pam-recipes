@@ -1,2 +1,5 @@
-[all:children]
+[databases]
 customer-database
+
+[all:children]
+databases
