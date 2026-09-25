@@ -1,56 +1,82 @@
+/*
+This policy file models a simple database access pattern. We have a tier-1 support
+group who have read-only access to our customer database. The on-call group has
+full read/write access to the database.
+
+By moving users between the groups we can see their access change in real-time.
+*/
 {
 	"groups": {
-	  "group:database-administrators": ["tailyandscaly@gmail.com"],
+		"group:tier-1-support": ["tailyandscaly@gmail.com"],
+		"group:on-call": [],
 	},
 
 	"tagOwners": {
-	 	"tag:database": ["group:database-administrators"],
+		"tag:database":        [],
 		"tag:border0-managed": ["autogroup:admin"],
 	},
 
 	"autoApprovers": {"services": {"tag:border0-managed": ["tag:border0-managed"]}},
 
-	// Define grants that govern access for users, groups, autogroups, tags,
-	// Tailscale IP addresses, and subnet ranges.
 	"grants": [
-	  // All members can access their own devices
+		// All members can access their own devices
 		{
 			"src": ["autogroup:member"],
 			"dst": ["autogroup:self"],
 			"ip":  ["tcp:*"],
 		},
 
+        // On-call engineers can SSH into database host machines
 		{
-  		"src": ["group:database-administrators"],
-  		"dst": ["tag:database"],
-      "ip":  ["tcp:22"]
-		}
+			"src": ["group:on-call"],
+			"dst": ["tag:database"],
+			"ip":  ["tcp:22"],
+		},
 
-		// Automatically added by enabling PAM. This grants access to every user with the "Admin" role for all PAM services.
+        // Tier 1 support agents get read-only access to all databases on the
+        // customer-database instance.
 		{
-			"src": ["autogroup:admin"],
-			"dst": ["tag:border0-managed"],
+			"src": ["group:tier-1-support"],
+			"dst": ["svc:customer-database"],
 			"ip":  ["*"],
-
 			"app": {
 				"tailscale.com/cap/pam": [
 					{
 						"version": "v1",
-
 						"permissions": {
-							"ssh": {
-								"shell": {},
-								"exec":  {},
-								"sftp":  {},
+							"database": {
+								"allowed_databases": [
+									{
+										"database":            "*",
+										"allowed_query_types": ["ReadOnly"],
+									},
+								],
 							},
+						},
+					},
+				],
+			},
+		},
 
-							"database":   {},
-							"http":       {},
-							"rdp":        {},
-							"vnc":        {},
-							"tcp":        {},
-							"kubernetes": {},
-							"aws_s3":     {},
+		// On-call engineers can make changes to all databases on the
+		// customer-database instance.
+		{
+			"src": ["group:on-call"],
+			"dst": ["svc:customer-database"],
+			"ip":  ["*"],
+			"app": {
+				"tailscale.com/cap/pam": [
+					{
+						"version": "v1",
+						"permissions": {
+							"database": {
+								"allowed_databases": [
+									{
+										"database":            "*",
+										"allowed_query_types": ["ReadWrite"],
+									},
+								],
+							},
 						},
 					},
 				],
@@ -69,10 +95,10 @@
 		},
 
 		{
-		  "action": "check",
-			"src": ["group:database-administrators"],
-			"dst": ["tag:database"],
-			"users": ["ubuntu", "root"]
-		}
+			"action": "check",
+			"src":    ["group:on-call"],
+			"dst":    ["tag:database"],
+			"users":  ["ubuntu", "root"],
+		},
 	],
 }
