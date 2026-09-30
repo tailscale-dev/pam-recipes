@@ -8,7 +8,7 @@
     ansible_pipelining: true   # avoids temp-file permission issues when becoming postgres
     pg_port: 5432
     pg_admin_user: pgadmin
-    # This is just a demo, don't commit your password to git. Use a secret manager!
+    # This is just a demo, you should use something more secure and pull it from a secrets manager.
     pg_admin_password: pgadmin
 
   tasks:

@@ -1,9 +1,30 @@
-# Tailscale PAM Demo
+# Tailscale PAM Recipes
 
-This repo demonstrates some simple use cases for Tailscale PAM, where you have a database with customer data and you need to be able to control access for some database administrators.
+This repo provides recipes to help get you going with
+[Tailscale Priviledged Access Management (PAM)](https://tailscale.com/use-cases/pam).
 
-The code in this repo should be treated as an example, rather than a runnable demo. If you wish to run it locally you will need to adjust the infrastructure and policy file to fit your setup.
+Each recipe consists of:
+* A README file giving an overview of how it works, and with ideas for taking it further.
+* A complete `policy.hujson` file which implements the various grants, these can be taken
+and adapted for your needs.
 
-## Policy and grants
+There may also be other supporting files to help get you going.
 
-The [policy.hujson](./policy.hujson) provides an example of
+## Recipes
+
+* [01 - Using PAM with the Amazon Web Services cloud (RDS, and S3)](./01-aws).
+* [01 - Self-managed VMs](./02-self-managed-vms).
+
+## Getting started
+
+These are designed to compliment the
+[Tailscale PAM documentation](https://tailscale.com/docs/privileged-access-management). If
+you haven't already, take a moment to read
+["What is Tailscale PAM?"](https://tailscale.com/docs/privileged-access-management/what-is-tailscale-pam)
+and ["Tailscale PAM architecture and core concepts"](https://tailscale.com/docs/privileged-access-management/architecture-and-concepts).
+
+After that, these recipes can be used as a starting point for your own configuration.
+
+License
+
+Contributions are licensed under the [BSD 3-Clause License](./LICENSE).

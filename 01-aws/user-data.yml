@@ -1,0 +1,16 @@
+#cloud-config
+hostname: aws-connector-node
+
+users:
+  - name: ubuntu
+    groups: [adm, sudo]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    lock_passwd: true
+
+ssh_pwauth: false
+
+runcmd:
+  # The invite token can be found by going to https://console.tailscale.com/admin/connectors/new and selecting
+  # "linux" as the platform option. The token is at the end of the displayed command.
+  - [ bash, -c, "sh <(curl -fsSL https://tailscale.border0.com/tailzero/install.sh) --invite TOKEN_HERE" ]

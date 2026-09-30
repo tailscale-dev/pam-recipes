@@ -1,0 +1,135 @@
+/*
+This policy file models a simple AWS RDS and S3 access pattern. This assumes
+2 resources: an RDS database tagged "customer-database", and an S3 bucket
+called "pangolin-pictures".
+
+It contains 2 tailnet groups with the following access:
+1. `group:tier-1-support` - Read-only access to the customer-database, no access
+to the S3 bucket.
+2. `group:on-call` - Read/write access to the customer-database, and read/write
+access to the S3 bucket, without the ability to delete content.
+*/
+{
+	"groups": {
+		"group:tier-1-support": ["tailyandscaly@gmail.com"],
+		"group:on-call":        [],
+	},
+
+	"tagOwners": {
+		"tag:connector-node":  [],
+		"tag:border0-managed": [],
+	},
+
+	"autoApprovers": {"services": {"tag:border0-managed": ["tag:border0-managed"]}},
+
+	"grants": [
+		// All members can access their own devices
+		{
+			"src": ["autogroup:member"],
+			"dst": ["autogroup:self"],
+			"ip":  ["tcp:*"],
+		},
+
+		// On-call can access ssh port
+		{
+			"src": ["group:on-call"],
+			"dst": ["tag:connector-node"],
+			"ip":  ["tcp:22"],
+		},
+
+		// Tier 1 support agents get read-only access to all databases on the
+		// customer-database instance.
+		{
+			"src": ["group:tier-1-support"],
+			"dst": ["svc:prd-customer-database"],
+			"ip":  ["*"],
+			"app": {
+				"tailscale.com/cap/pam": [
+					{
+						"version": "v1",
+						"permissions": {
+							"database": {
+								"allowed_databases": [
+									{
+										"database":            "*",
+										"allowed_query_types": ["ReadOnly"],
+									},
+								],
+							},
+						},
+					},
+				],
+			},
+		},
+
+		// On-call engineers can make changes to all databases on the
+		// customer-database instance.
+		{
+			"src": ["group:on-call"],
+			"dst": ["svc:prd-customer-database"],
+			"ip":  ["*"],
+			"app": {
+				"tailscale.com/cap/pam": [
+					{
+						"version": "v1",
+						"permissions": {
+							"database": {
+								"allowed_databases": [
+									{
+										"database":            "*",
+										"allowed_query_types": ["ReadWrite"],
+									},
+								],
+							},
+						},
+					},
+				],
+			},
+		},
+
+        // On-call can access the S3 bucket with customer uploaded
+        // assets for debugging.
+		{
+            "src": ["group:on-call"],
+            "dst": ["svc:customer-assets"],
+            "ip": ["*"],
+            "app": {
+                "tailscale.com/cap/pam": [
+                    {
+                        "version": "v1",
+                        "permissions": {
+                            "aws_s3": {
+                                "rules": [
+                                    {
+                                        "buckets": ["pangolin-pictures"],
+										"paths":   ["*"],
+                                        "actions": ["list", "read", "write", "delete"]
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+	],
+
+	// Define users and devices that can use Tailscale SSH.
+	"ssh": [
+		// Allow users to SSH into their own devices in check mode.
+		{
+			"action": "check",
+			"src":    ["autogroup:member"],
+			"dst":    ["autogroup:self"],
+			"users":  ["autogroup:nonroot", "root"],
+		},
+
+		// Allow on-call users to SSH into the connector node EC2.
+		{
+			"action": "check",
+			"src":    ["group:on-call"],
+			"dst":    ["tag:connector-node"],
+			"users":  ["ubuntu"],
+		},
+	],
+}

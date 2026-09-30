@@ -94,6 +94,7 @@ By moving users between the groups we can see their access change in real-time.
 			"users":  ["autogroup:nonroot", "root"],
 		},
 
+        // Allow on-call users to SSH into the database host node
 		{
 			"action": "check",
 			"src":    ["group:on-call"],
