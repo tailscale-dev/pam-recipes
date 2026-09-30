@@ -24,6 +24,8 @@
             terraform
             openssh
             git
+            curl
+            jq
           ];
         };
       });

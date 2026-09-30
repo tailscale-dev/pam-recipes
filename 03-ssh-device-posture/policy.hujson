@@ -1,0 +1,222 @@
+/*
+Fine-grained SSH for two product teams, where the capabilities a user gets
+depend on the posture of the device they are sitting at.
+
+There is no direct SSH to the application fleets, so the only route to a shell
+is through a PAM service. See the README for the full picture.
+*/
+{
+	"groups": {
+		// Owns the checkout and payments service.
+		"group:team-checkout": ["tailyandscaly@gmail.com"],
+
+		// Owns the image ingest and transcode pipeline.
+		"group:team-media": [],
+
+		// Cross-cutting platform engineers, who own the hosts everything runs on.
+		"group:platform": [],
+	},
+
+	"tagOwners": {
+		"tag:srv-checkout":   ["autogroup:admin"],
+		"tag:srv-media":      ["autogroup:admin"],
+		"tag:connector-node": ["autogroup:admin"],
+
+		// Created for you when you enable the PAM integration.
+		"tag:border0-managed": [],
+	},
+
+	"autoApprovers": {"services": {"tag:border0-managed": ["tag:border0-managed"]}},
+
+	// Postures cannot reference each other, so the OS condition is repeated.
+	// Set the custom attribute with ./set-posture-attribute.sh.
+	"postures": {
+		// A phone or tablet is fine for triage, but not for a shell.
+		"posture:managedDevice": [
+			"node:os IN ['macos', 'windows', 'linux']",
+		],
+
+		// The bar for root and for port forwarding: a machine the company owns.
+		"posture:privilegedWorkstation": [
+			"node:os IN ['macos', 'windows', 'linux']",
+			"custom:deviceOwnership == 'corporate'",
+		],
+	},
+
+	"grants": [
+		// All members can access their own devices.
+		{
+			"src": ["autogroup:member"],
+			"dst": ["autogroup:self"],
+			"ip":  ["tcp:*"],
+		},
+
+		// Level 1: triage from any device. Only `exec` is named, so shell, SFTP
+		// and forwarding are all denied. Anchor the regexes: an unanchored
+		// `journalctl` would also match `journalctl; rm -rf /`.
+		{
+			"src": ["group:team-checkout"],
+			"dst": ["svc:checkout-api"],
+			"ip":  ["*"],
+			"app": {
+				"tailscale.com/cap/pam": [
+					{
+						"version": "v1",
+						"permissions": {
+							"ssh": {
+								"allowed_usernames": ["checkout"],
+								"exec": {
+									"commands": [
+										"^systemctl status checkout-api$",
+										"^systemctl is-active checkout-api$",
+										"^journalctl -u checkout-api -n [0-9]{1,4}( --no-pager)?$",
+										"^journalctl -u checkout-api --since '[^']+'( --no-pager)?$",
+										"^ss -ltn$",
+										"^df -h$",
+										"^uptime$",
+									],
+								},
+							},
+						},
+					},
+				],
+			},
+		},
+
+		// The same for the media team on their own pipeline hosts.
+		{
+			"src": ["group:team-media"],
+			"dst": ["svc:media-pipeline"],
+			"ip":  ["*"],
+			"app": {
+				"tailscale.com/cap/pam": [
+					{
+						"version": "v1",
+						"permissions": {
+							"ssh": {
+								"allowed_usernames": ["media"],
+								"exec": {
+									"commands": [
+										"^systemctl status transcoder@[0-9]+$",
+										"^systemctl is-active transcoder@[0-9]+$",
+										"^journalctl -u 'transcoder@\\*' -n [0-9]{1,4}( --no-pager)?$",
+										"^ss -ltn$",
+										"^df -h$",
+										"^uptime$",
+									],
+								},
+							},
+						},
+					},
+				],
+			},
+		},
+
+		// Level 2: a real shell, from a managed device only. `"exec": {}` is an
+		// empty object, not an omission: it enables exec with no restrictions.
+		{
+			"src":        ["group:team-checkout"],
+			"dst":        ["svc:checkout-api"],
+			"ip":         ["*"],
+			"srcPosture": ["posture:managedDevice"],
+			"app": {
+				"tailscale.com/cap/pam": [
+					{
+						"version": "v1",
+						"permissions": {
+							"ssh": {
+								"allowed_usernames": ["checkout"],
+								"shell":             {},
+								"exec":              {},
+								"sftp":              {},
+							},
+						},
+					},
+				],
+			},
+		},
+
+		{
+			"src":        ["group:team-media"],
+			"dst":        ["svc:media-pipeline"],
+			"ip":         ["*"],
+			"srcPosture": ["posture:managedDevice"],
+			"app": {
+				"tailscale.com/cap/pam": [
+					{
+						"version": "v1",
+						"permissions": {
+							"ssh": {
+								"allowed_usernames": ["media"],
+								"shell":             {},
+								"exec":              {},
+								"sftp":              {},
+							},
+						},
+					},
+				],
+			},
+		},
+
+		// Level 3: platform engineers on a corporate workstation. Forwarding is
+		// off unless asked for, and is listed destination by destination so this
+		// stays "reach the replica" rather than "jump box into the whole VPC".
+		{
+			"src":        ["group:platform"],
+			"dst":        ["svc:checkout-api", "svc:media-pipeline"],
+			"ip":         ["*"],
+			"srcPosture": ["posture:privilegedWorkstation"],
+			"app": {
+				"tailscale.com/cap/pam": [
+					{
+						"version": "v1",
+						"permissions": {
+							"ssh": {
+								"allowed_usernames": ["checkout", "media", "root"],
+								"shell":             {},
+								"exec":              {},
+								"sftp":              {},
+								"tcp_forwarding": {
+									"allowed_connections": [
+										// Postgres read replica.
+										{
+											"destination_address": "10.0.30.10",
+											"destination_port":    "5432",
+										},
+
+										// Prometheus.
+										{
+											"destination_address": "10.0.30.20",
+											"destination_port":    "9090",
+										},
+									],
+								},
+							},
+						},
+					},
+				],
+			},
+		},
+
+		// Break-glass. The connector cannot broker access to itself, so this is
+		// the one piece of direct SSH in the policy.
+		{
+			"src":        ["group:platform"],
+			"dst":        ["tag:connector-node"],
+			"ip":         ["tcp:22"],
+			"srcPosture": ["posture:privilegedWorkstation"],
+		},
+	],
+
+	"ssh": [
+		// Pairs with the break-glass grant above.
+		{
+			"action":      "check",
+			"checkPeriod": "always",
+			"src":         ["group:platform"],
+			"dst":         ["tag:connector-node"],
+			"users":       ["ubuntu"],
+			"srcPosture":  ["posture:privilegedWorkstation"],
+		},
+	],
+}
