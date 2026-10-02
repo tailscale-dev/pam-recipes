@@ -125,7 +125,7 @@ but the connector is what actually talks to AWS.
   touches. If tier-1 support should not see a column at all, that still belongs
   in a database role or a view.
 - Swapping RDS for a self-managed Postgres host changes nothing above except
-  where the service points. [02](../02-self-managed-vms) does exactly that.
+  where the service points — the grants are unchanged.
 
 [pam-get-started]: https://tailscale.com/docs/privileged-access-management/get-started
 [pam-database]: https://tailscale.com/docs/privileged-access-management/how-to/access-database

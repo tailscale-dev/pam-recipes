@@ -1,0 +1,112 @@
+/*
+An internal web application with no login screen of its own, published through
+a Tailscale PAM HTTP service.
+
+PAM authenticates the user, then forwards their identity to the application in
+X-Auth-* headers and signs the important ones. The application trusts the
+headers because it can verify the signature, not because it trusts the network.
+
+The thing to notice in this file is what is missing: nothing grants anyone
+tcp:8080 on the connector node. See the README for why that matters.
+*/
+{
+	"groups": {
+		// Everyone who should be able to open the internal app.
+		"group:engineering": ["tailyandscaly@gmail.com"],
+
+		// Owns the connector host itself.
+		"group:platform": [],
+	},
+
+	"tagOwners": {
+		"tag:connector-node": ["autogroup:admin"],
+
+		// Automation that calls the app rather than browsing it. Every tag is
+		// represented in PAM as a service account, which is how the app can
+		// tell this traffic apart from a human's.
+		"tag:ci": ["autogroup:admin"],
+
+		// Created for you when you enable the PAM integration.
+		"tag:border0-managed": [],
+	},
+
+	"autoApprovers": {"services": {"tag:border0-managed": ["tag:border0-managed"]}},
+
+	"grants": [
+		// All members can access their own devices.
+		{
+			"src": ["autogroup:member"],
+			"dst": ["autogroup:self"],
+			"ip":  ["tcp:*"],
+		},
+
+		// Engineering can reach the app through PAM. Every request arrives
+		// upstream carrying a signed assertion of who made it.
+		{
+			"src": ["group:engineering"],
+			"dst": ["svc:whoami"],
+			"ip":  ["*"],
+			"app": {
+				"tailscale.com/cap/pam": [
+					{
+						"version": "v1",
+						"permissions": {
+							"http": {},
+						},
+					},
+				],
+			},
+		},
+
+		// The same service, reached by automation. These requests arrive with
+		// x-auth-isserviceaccount set, and that header is inside the signed
+		// set, so the application can act on it.
+		{
+			"src": ["tag:ci"],
+			"dst": ["svc:whoami"],
+			"ip":  ["*"],
+			"app": {
+				"tailscale.com/cap/pam": [
+					{
+						"version": "v1",
+						"permissions": {
+							"http": {},
+						},
+					},
+				],
+			},
+		},
+
+		// Break-glass onto the connector host. The connector cannot broker
+		// access to itself, so this is the one piece of direct access here.
+		//
+		// Note that this grant covers tcp:22 and nothing else. Widening it to
+		// tcp:* would put the application's own listener in reach of anyone in
+		// group:platform, and a request that arrives that way carries whatever
+		// X-Auth-Email the caller felt like typing.
+		{
+			"src": ["group:platform"],
+			"dst": ["tag:connector-node"],
+			"ip":  ["tcp:22"],
+		},
+	],
+
+	// Define users and devices that can use Tailscale SSH.
+	"ssh": [
+		// Allow users to SSH into their own devices in check mode.
+		{
+			"action": "check",
+			"src":    ["autogroup:member"],
+			"dst":    ["autogroup:self"],
+			"users":  ["autogroup:nonroot", "root"],
+		},
+
+		// Pairs with the break-glass grant above.
+		{
+			"action": "check",
+			"src":    ["group:platform"],
+			"dst":    ["tag:connector-node"],
+			"users":  ["ubuntu"],
+		},
+	],
+}

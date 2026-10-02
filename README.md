@@ -13,7 +13,7 @@ There may also be other supporting files to help get you going.
 ## Recipes
 
 * [01 - Using PAM with the Amazon Web Services cloud (RDS, and S3)](./01-aws).
-* [02 - Self-managed VMs](./02-self-managed-vms).
+* [02 - Internal web apps and forwarded identity](./02-http-identity-headers).
 * [03 - Fine-grained SSH with device posture](./03-ssh-device-posture).
 
 ## Getting started
