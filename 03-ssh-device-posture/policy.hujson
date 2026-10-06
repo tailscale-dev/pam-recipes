@@ -8,7 +8,7 @@ is through a PAM service. See the README for the full picture.
 {
 	"groups": {
 		// Owns the checkout and payments service.
-		"group:team-checkout": ["tailyandscaly@gmail.com"],
+		"group:team-checkout": ["ameliepangolin@gmail.com"],
 
 		// Owns the image ingest and transcode pipeline.
 		"group:team-media": [],
@@ -180,13 +180,13 @@ is through a PAM service. See the README for the full picture.
 									"allowed_connections": [
 										// Postgres read replica.
 										{
-											"destination_address": "10.0.30.10",
+											"destination_address": "10.0.2.10",
 											"destination_port":    "5432",
 										},
 
 										// Prometheus.
 										{
-											"destination_address": "10.0.30.20",
+											"destination_address": "10.0.2.20",
 											"destination_port":    "9090",
 										},
 									],
@@ -198,8 +198,8 @@ is through a PAM service. See the README for the full picture.
 			},
 		},
 
-		// Break-glass. The connector cannot broker access to itself, so this is
-		// the one piece of direct SSH in the policy.
+		// Break-glass. The PAM connector cannot broker access to itself, so
+		// this is the one piece of direct SSH in the policy.
 		{
 			"src":        ["group:platform"],
 			"dst":        ["tag:connector-node"],

@@ -1,17 +1,17 @@
 /*
-This policy file models a simple AWS RDS and S3 access pattern. This assumes
-2 resources: an RDS database tagged "customer-database", and an S3 bucket
-called "pangolin-pictures".
+This policy file models a simple Amazon RDS and Amazon S3 access pattern. This
+assumes 2 resources: an Amazon RDS database tagged "customer-database", and an
+Amazon S3 bucket called "pangolin-pictures".
 
 It contains 2 tailnet groups with the following access:
 1. `group:tier-1-support` - Read-only access to the customer-database, no access
-to the S3 bucket.
+to the Amazon S3 bucket.
 2. `group:on-call` - Read/write access to the customer-database, and read/write
-access to the S3 bucket, without the ability to delete content.
+access to the Amazon S3 bucket, without the ability to delete content.
 */
 {
 	"groups": {
-		"group:tier-1-support": ["tailyandscaly@gmail.com"],
+		"group:tier-1-support": ["ameliepangolin@gmail.com"],
 		"group:on-call":        [],
 	},
 
@@ -103,7 +103,7 @@ access to the S3 bucket, without the ability to delete content.
                                     {
                                         "buckets": ["pangolin-pictures"],
 										"paths":   ["*"],
-                                        "actions": ["list", "read", "write", "delete"]
+                                        "actions": ["list", "read", "write"]
                                     }
                                 ]
                             }
@@ -124,7 +124,7 @@ access to the S3 bucket, without the ability to delete content.
 			"users":  ["autogroup:nonroot", "root"],
 		},
 
-		// Allow on-call users to SSH into the connector node EC2.
+		// Allow on-call users to SSH into the PAM connector EC2 instance.
 		{
 			"action": "check",
 			"src":    ["group:on-call"],

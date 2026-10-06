@@ -3,9 +3,9 @@
 //
 // A PAM HTTP service forwards the authenticated user's identity upstream in
 // X-Auth-* headers, and signs part of that set with an Ed25519 key published
-// as a JWKS. This server reconstructs the canonical request, checks the
-// signature, and renders the headers in two groups: the ones covered by the
-// signature and the ones that are not.
+// as a JSON Web Key Set (JWKS). This server reconstructs the canonical
+// request, checks the signature, and renders the headers in two groups: the
+// ones covered by the signature and the ones that are not.
 //
 // It deliberately does not reject unsigned requests. Being able to see a
 // forged header land in the "not covered" column is the point.

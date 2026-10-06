@@ -7,14 +7,14 @@ X-Auth-* headers and signs the important ones. The application trusts the
 headers because it can verify the signature, not because it trusts the network.
 
 The thing to notice in this file is what is missing: nothing grants anyone
-tcp:8080 on the connector node. See the README for why that matters.
+tcp:8080 on the PAM connector. See the README for why that matters.
 */
 {
 	"groups": {
 		// Everyone who should be able to open the internal app.
-		"group:engineering": ["tailyandscaly@gmail.com"],
+		"group:engineering": ["ameliepangolin@gmail.com"],
 
-		// Owns the connector host itself.
+		// Owns the PAM connector host itself.
 		"group:platform": [],
 	},
 
@@ -77,8 +77,9 @@ tcp:8080 on the connector node. See the README for why that matters.
 			},
 		},
 
-		// Break-glass onto the connector host. The connector cannot broker
-		// access to itself, so this is the one piece of direct access here.
+		// Break-glass onto the PAM connector host. The PAM connector cannot
+		// broker access to itself, so this is the one piece of direct access
+		// here.
 		//
 		// Note that this grant covers tcp:22 and nothing else. Widening it to
 		// tcp:* would put the application's own listener in reach of anyone in

@@ -1,14 +1,16 @@
-# 01 - AWS RDS and S3
+# Amazon RDS and Amazon S3
 
 A support team needs to read customer records in production, and an on-call
-engineer needs to change them. Both live in an RDS instance inside a private
-VPC, next to an S3 bucket holding customer uploads. Neither job should involve
-handing anyone a database password or a set of AWS keys.
+engineer needs to change them. Both live in an Amazon Relational Database
+Service (Amazon RDS) instance inside a private Amazon Virtual Private Cloud
+(Amazon VPC), next to an Amazon Simple Storage Service (Amazon S3) bucket
+holding customer uploads. Neither job should involve handing anyone a database
+password or a set of AWS keys.
 
-This example puts a PAM connector inside the VPC. The connector holds the
-Postgres credential and the AWS credential; users hold neither. What a person
-can do is decided by the tailnet group they are in, so moving someone between
-groups changes their access immediately.
+This example puts a PAM connector inside the Amazon VPC. The PAM connector
+holds the Postgres credential and the AWS credential; users hold neither. The
+tailnet group a person belongs to decides what they can do, so moving someone
+between groups changes their access immediately.
 
 ## What it models
 
@@ -22,61 +24,63 @@ flowchart LR
         svc2["svc:customer-assets"]
     end
 
-    subgraph vpc["AWS VPC"]
-        rds[("RDS Postgres<br/>customer-database")]
-        s3["S3 bucket<br/>pangolin-pictures"]
+    subgraph vpc["Amazon VPC"]
+        rds[("Amazon RDS Postgres<br/>customer-database")]
+        s3["Amazon S3 bucket<br/>pangolin-pictures"]
     end
 
     t1 -->|"read-only queries"| svc1
     oncall -->|"read/write queries"| svc1
-    oncall -->|"list, read, write, delete"| svc2
+    oncall -->|"list, read, write"| svc2
     oncall -.->|"tcp:22 break-glass"| connector
 
     svc1 --> rds
     svc2 --> s3
 ```
 
-Nothing in the policy grants `tcp:5432` to the RDS instance, and nothing hands
-out AWS keys. The connector is the only thing holding either credential, so
-the only route to the data is through a service — which means every query and
-every object operation is permission-checked and recorded.
+Nothing in the policy grants `tcp:5432` to the Amazon RDS instance, and nothing
+hands out AWS keys. The PAM connector is the only thing holding either
+credential, so the only route to the data is through a service. This means
+every query and every object operation is permission-checked and recorded.
 
 ## Who gets what
 
-| | `svc:prd-customer-database` | `svc:customer-assets` | `tag:connector-node` |
+| Group | `svc:prd-customer-database` | `svc:customer-assets` | `tag:connector-node` |
 |---|---|---|---|
-| `group:tier-1-support` | read-only queries, any database | — | — |
-| `group:on-call` | read/write queries, any database | list, read, write, delete | SSH as `ubuntu` |
+| `group:tier-1-support` | read-only queries, any database | No access | No access |
+| `group:on-call` | read/write queries, any database | list, read, write | SSH as `ubuntu` |
 
 Both database grants name `"database": "*"`, so they cover every database on
 the instance. List names instead if you only want one of them.
 
 The two rows differ only in `allowed_query_types`. PAM classifies each
-statement as it goes past, so `ReadOnly` refuses anything that writes without
-any change on the RDS side — the service keeps using the same upstream
-credential for both groups.
+statement as it passes through, so `ReadOnly` rejects any statement that
+writes. This needs no change on the Amazon RDS side. The service keeps using
+the same upstream credential for both groups.
 
 The SSH grant is the one piece of direct access in the policy, and it is there
-because the connector cannot broker access to itself.
+because the PAM connector cannot broker access to itself.
 
-## Setting it up
+## Set up the recipe
 
-1. [Enable the PAM integration][pam-get-started], then launch an EC2 instance in
-   a subnet that can reach the RDS instance, this will become your connector
-   node.
-1. Install tailzero, the connector application and join it to your tailnet. If
-   you wish to do this as part of the EC2 creation process you can provide the
-   one line setup command as part of cloud-init user data,
+1. [Enable the PAM integration][pam-get-started], then launch an Amazon Elastic
+   Compute Cloud (Amazon EC2) instance in a subnet that can reach the Amazon RDS
+   instance. This instance becomes your PAM connector.
+1. Install Tailzero, the application that runs a PAM connector, and join it to
+   your tailnet. To install Tailzero when you create the Amazon EC2 instance,
+   provide the one-line setup command as cloud-init user data.
    [`user-data.yml`](../assets/user-data.yml) has an example.
 1. Create a [database service][pam-database] named `prd-customer-database` on
-   that connector, pointed at the RDS endpoint and holding the Postgres
-   credential. The names have to match the `svc:` references in the policy file.
-1. Create an [S3 service][pam-s3] named `customer-assets`, and give the
-   connector an instance role or static credentials that can reach the bucket.
-1. Apply [`policy.hujson`](./policy.hujson), see the project wide
+   that PAM connector, pointed at the Amazon RDS endpoint and holding the
+   Postgres credential. The names have to match the `svc:` references in the
+   policy file.
+1. Create an [Amazon S3 service][pam-s3] named `customer-assets`, and give the
+   PAM connector an instance role or static credentials that can reach the
+   bucket.
+1. Apply [`policy.hujson`](./policy.hujson). Refer to the project-wide
    [README](../README.md) for advice on how to do this.
 
-## Trying it out
+## Test the recipe
 
 If the database is empty, [`assets/sample-data.sql`](../assets/sample-data.sql)
 creates `customers` and `orders` tables with a few dozen rows in them.
@@ -85,26 +89,25 @@ Put yourself in `group:tier-1-support` by editing the group section of the polic
 
 ```json
 	"groups": {
-	  // Put your tailscale user into the tier-1-support group, replacing the
+	  // Put your Tailscale user into the tier-1-support group, replacing the
 		// example user.
-		"group:tier-1-support": ["tailyandscaly@gmail.com"],
+		"group:tier-1-support": ["ameliepangolin@gmail.com"],
 		"group:on-call":        [],
 	},
 ```
 
-Reads work, and
-there is no password to type — the connector holds the credential, and your
-Tailscale identity is what was checked:
+Reads work, and there is no password to type. The PAM connector holds the
+credential, and Tailscale checks your identity:
 
-```console
-$ psql -h prd-customer-database -p 5432 -d postgres \
+```shell
+psql -h prd-customer-database -p 5432 -d postgres \
     -c 'SELECT id, email, country FROM customers LIMIT 5;'
 ```
 
 Writes do not:
 
-```console
-$ psql -h prd-customer-database -p 5432 -d postgres \
+```shell
+psql -h prd-customer-database -p 5432 -d postgres \
     -c "UPDATE orders SET status = 'refunded' WHERE id = 42;"
 ```
 
@@ -120,30 +123,31 @@ endpoint_url          = http://customer-assets
 addressing_style      = path
 ```
 
-```console
-$ aws --profile customer-assets s3 ls s3://pangolin-pictures/
+```shell
+aws --profile customer-assets s3 ls s3://pangolin-pictures/
 ```
 
 The credentials there are placeholders. The CLI insists on finding something,
-but the connector is what actually talks to AWS.
+but the PAM connector is what actually talks to AWS.
 
 ## Clean up
 
-If you've experimented with this recipe by spinning up new resources in AWS,
-don't forget to tear them down afterwards so you don't incur unnecessary costs.
+If you created new AWS resources for this recipe, delete them when you finish
+to avoid unnecessary costs.
 
 ## Notes
 
-- The S3 grant allows `delete`. Drop it from `actions` if you want on-call to
-  be able to repair customer data without being able to destroy it.
+- The Amazon S3 grant doesn't include `delete`, so on-call can repair
+  customer data but can't destroy it. Add `delete` to `actions` if on-call
+  needs to remove objects.
 - Buckets are filtered in two places: on the service, which decides what the
-  connector will serve at all, and in the grant's `buckets` and `paths`. It is
-  worth narrowing both rather than relying on the grant alone.
+  PAM connector serves at all, and in the grant's `buckets` and `paths`. It
+  is worth narrowing both rather than relying on the grant alone.
 - `allowed_query_types` is about the shape of the statement, not the rows it
   touches. If tier-1 support should not see a column at all, that still belongs
   in a database role or a view.
-- Swapping RDS for a self-managed Postgres host changes nothing above except
-  where the service points — the grants are unchanged.
+- Swapping Amazon RDS for a self-managed Postgres host changes nothing above
+  except where the service points. The grants are unchanged.
 
 [pam-get-started]: https://tailscale.com/docs/privileged-access-management/get-started
 [pam-database]: https://tailscale.com/docs/privileged-access-management/how-to/access-database

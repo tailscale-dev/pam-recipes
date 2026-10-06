@@ -7,14 +7,14 @@
 # the Machine Details page for the device.
 #
 # This approach of setting attributes should not be used in a production deployment.
-# These would be written by your MDM at enrolment, or baked in at
+# These would be written by your MDM at enrollment, or baked in at
 # provisioning time with an OAuth device-provisioning key so that the user
 # cannot set them on their own machine. This script is for trying the mechanic
 # out by hand.
 #
 # Usage:
 #   ./set-posture-attribute.sh deviceOwnership corporate
-#   ./set-posture-attribute.sh --expiry 2026-10-01T09:00:00Z deviceOwnership corporate
+#   ./set-posture-attribute.sh --expiry <expiry-timestamp> deviceOwnership corporate
 #   ./set-posture-attribute.sh --device nroUUDGqX111CNTRL deviceOwnership byod
 #   ./set-posture-attribute.sh --delete deviceOwnership
 #
