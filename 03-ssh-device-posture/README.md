@@ -4,10 +4,11 @@ Two product teams each own a fleet of Linux hosts. A platform team owns the
 hosts underneath both. Nobody has direct SSH to any of it, and what you are
 allowed to do once you land on a host depends on the device you connected from.
 
-This example leverages device postures to adapt a user's access based on the
-device they're accessing the service from. The same person, in the same group,
-could get some very limited access via their phone, and a root shell from their
-corporate laptop.
+This example leverages [device
+postures](https://tailscale.com/docs/features/device-posture) to adapt a user's
+access based on the device they're accessing the service from. The same person,
+in the same group, could get some very limited access via their phone, and a
+root shell from their corporate laptop.
 
 ## What it models
 
