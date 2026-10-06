@@ -70,8 +70,10 @@ $ docker run -d --name whoami -p 127.0.0.1:8080:8080 whoami
 3. Create an [HTTP service][pam-http] named `whoami` on that connector, with
    `http://127.0.0.1:8080` as the upstream. The name has to match the `svc:`
    reference in the policy file.
-4. Apply [`policy.hujson`](./policy.hujson), editing the group membership to
-   something real.
+4. Edit the [`policy.hujson`](./policy.hujson) to fit your needs, such as adding
+   your user into the `group:engineering` group. Then apply the policy to your
+   tailnet by copying it into the [Access controls JSON
+   editor](https://console.tailscale.com/admin/acls/file).
 
 Plain HTTP upstream is deliberate. PAM terminates TLS for the user; the hop
 from the connector to the application stays on the loopback interface, so
@@ -83,8 +85,10 @@ Open the service from the Tailscale client. You get a green panel, your own
 email under **Verified identity**, and the exact canonical string the signature
 was checked against.
 
-Now be the dotted line. SSH to the connector host and talk to the application
-directly, claiming to be someone more interesting:
+Now lets test out the forgery route by claiming to be someone else. SSH into the
+connector which has direct access to our demo application and use this curl
+command to forge the request. You may need to alter the destination if you're
+running the application on a different port.
 
 ```console
 $ curl -s -H 'X-Auth-Email: ceo@example.com' http://127.0.0.1:8080/ | jq '.signature.status, .in_signed_header_set'
@@ -101,19 +105,9 @@ $ curl -s -H 'X-Auth-Email: ceo@example.com' http://127.0.0.1:8080/ | jq '.signa
 ]
 ```
 
-The header is there, the server reports it, and the status says exactly how
-much that is worth. An application doing `if email == "ceo@example.com"` would
-have been convinced. One that checks the signature first is not.
-
-The same thing happens to a header rewritten in flight: forward a real signed
-request but change `X-Auth-Email` on the way past and the status becomes
-`invalid` rather than `unsigned`, because the signature no longer matches the
-canonical string.
-
-For the service-account path, run the same request from a device tagged
-`tag:ci` and watch `X-Auth-IsServiceAccount` come back `true` — inside the
-signed set, so an application can refuse to let automation do something that
-should need a person.
+The curl request has provided fake headers claiming to be `ceo@example.com`, but
+because it cannot provide a valid signature the application does not trust the
+claim.
 
 [pam-get-started]: https://tailscale.com/docs/privileged-access-management/get-started
 [pam-http]: https://tailscale.com/docs/privileged-access-management/how-to/access-http-service

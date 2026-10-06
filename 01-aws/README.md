@@ -61,27 +61,40 @@ because the connector cannot broker access to itself.
 
 ## Setting it up
 
-1. [Enable the PAM integration][pam-get-started], then launch an EC2 instance
-   in a subnet that can reach the RDS instance and use it as your connector.
-   [`user-data.yml`](./user-data.yml) installs the connector on boot — replace
-   `TOKEN_HERE` with the invite token shown when you add a Linux connector.
-2. Create a [database service][pam-database] named `prd-customer-database` on
+1. [Enable the PAM integration][pam-get-started], then launch an EC2 instance in
+   a subnet that can reach the RDS instance, this will become your connector
+   node.
+1. Install tailzero, the connector application and join it to your tailnet. If
+   you wish to do this as part of the EC2 creation process you can provide the
+   one line setup command as part of cloud-init user data,
+   [`user-data.yml`](../assets/user-data.yml) has an example.
+1. Create a [database service][pam-database] named `prd-customer-database` on
    that connector, pointed at the RDS endpoint and holding the Postgres
-   credential. The names have to match the `svc:` references in the policy
-   file.
-3. Create an [S3 service][pam-s3] named `customer-assets`, and give the
+   credential. The names have to match the `svc:` references in the policy file.
+1. Create an [S3 service][pam-s3] named `customer-assets`, and give the
    connector an instance role or static credentials that can reach the bucket.
-4. Apply [`policy.hujson`](./policy.hujson), editing the group membership and
-   the bucket name to something real.
+1. Apply [`policy.hujson`](./policy.hujson), see the project wide
+   [README](../README.md) for advice on how to do this.
 
 ## Trying it out
 
 If the database is empty, [`assets/sample-data.sql`](../assets/sample-data.sql)
 creates `customers` and `orders` tables with a few dozen rows in them.
 
-Put yourself in `group:tier-1-support`. Reads work, and there is no password to
-type — the connector holds the credential, and your Tailscale identity is what
-was checked:
+Put yourself in `group:tier-1-support` by editing the group section of the policy:
+
+```json
+	"groups": {
+	  // Put your tailscale user into the tier-1-support group, replacing the
+		// example user.
+		"group:tier-1-support": ["tailyandscaly@gmail.com"],
+		"group:on-call":        [],
+	},
+```
+
+Reads work, and
+there is no password to type — the connector holds the credential, and your
+Tailscale identity is what was checked:
 
 ```console
 $ psql -h prd-customer-database -p 5432 -d postgres \
@@ -113,6 +126,11 @@ $ aws --profile customer-assets s3 ls s3://pangolin-pictures/
 
 The credentials there are placeholders. The CLI insists on finding something,
 but the connector is what actually talks to AWS.
+
+## Clean up
+
+If you've experimented with this recipe by spinning up new resources in AWS,
+don't forget to tear them down afterwards so you don't incur unnecessary costs.
 
 ## Notes
 
