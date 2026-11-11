@@ -134,7 +134,8 @@ type sigInfo struct {
 	RequestID  string `json:"request_id,omitempty"`
 	Timestamp  string `json:"timestamp,omitempty"`
 	AgeSeconds *int64 `json:"age_seconds,omitempty"`
-	Canonical  string `json:"canonical_request"`
+	Value     string `json:"value,omitempty"`
+	Canonical string `json:"canonical_request"`
 }
 
 type report struct {
@@ -156,6 +157,7 @@ func buildReport(r *http.Request, ks *keySet) report {
 			KeyID:     r.Header.Get("X-Auth-Kid"),
 			RequestID: r.Header.Get("X-Auth-Request-Id"),
 			Timestamp: r.Header.Get("X-Auth-Timestamp"),
+			Value:     r.Header.Get("X-Auth-Sig"),
 			Canonical: canonical,
 		},
 	}
@@ -470,6 +472,10 @@ var page = template.Must(template.New("page").Parse(`<!DOCTYPE html>
   {{range .Other}}<tr><th>{{.Name}}</th><td>{{.Value}}</td></tr>{{end}}
 </table>
 {{end}}
+
+<h2>Signature (X-Auth-Sig)</h2>
+<p class="note">The base64 Ed25519 signature exactly as the request carried it.</p>
+<pre>{{if .Signature.Value}}{{.Signature.Value}}{{else}}(none &mdash; request not signed){{end}}</pre>
 
 <h2>Canonical request</h2>
 <p class="note">
